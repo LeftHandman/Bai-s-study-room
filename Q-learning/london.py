@@ -1,13 +1,6 @@
 import pygame
 import random
 import copy
-# 初始化 Pygame
-pygame.init()
-
-# 设置窗口大小
-window_size = (600, 400)
-screen = pygame.display.set_mode(window_size)
-pygame.display.set_caption("Q-learning Optimal Path")
 
 # 定义颜色
 WHITE = (255, 255, 255)
@@ -22,13 +15,14 @@ block_size = 50
 positions = [(100, 100), (200, 100), (300, 100),
              (400, 100), (500, 100)]
 
+
 class Env():
     def __init__(self, plate=None):
         if plate is None:
-            plate = ['r', 'g', 'b', 'y', 'p']
+            plate = ['r', 'g', 'b']
         self.start = []
         self.plate = copy.copy(plate)
-        self.length = [ 2, 3, 2, 1]
+        self.length = [3, 2, 1]
         for l in range(len(self.length)):
             self.start.append([])
         self.goal = copy.deepcopy(self.start)
@@ -38,7 +32,7 @@ class Env():
                 rand_num = random.randint(0, len(self.length) - 1)
                 if len(self.start[rand_num]) < self.length[rand_num]:
                     if 0 < len(self.plate) - i:
-                        self.start[rand_num].append(self.plate.pop(random.randint(0, len(self.plate)-i-1)))
+                        self.start[rand_num].append(self.plate.pop(random.randint(0, len(self.plate) - i - 1)))
                     else:
                         self.start[rand_num].append(self.plate.pop())
                     success = True
@@ -65,7 +59,7 @@ class Env():
 
     def step(self, action):
         state_list = [list(stack) for stack in self.state]
-        state_list[action[1]-1].append(state_list[action[0]-1].pop())
+        state_list[action[1] - 1].append(state_list[action[0] - 1].pop())
 
         self.state = tuple(tuple(stack) for stack in state_list)
         return self.state, 1 if self.is_goal() else 0, self.is_goal()
@@ -77,7 +71,7 @@ class Env():
             if self.length[i] > len(state_list[i]):
                 for j in range(len(state_list)):
                     if len(state_list[j]) and i != j:
-                        _action.append(tuple((int(j)+1, int(i)+1)))
+                        _action.append(tuple((int(j) + 1, int(i) + 1)))
 
         return _action
 
@@ -132,15 +126,14 @@ def q_learning(env, num_episode=10000, alpha=0.1, gamma=0.95,
 
         # q值收敛时终止迭代
         if episode > num_episode * 0.5 and max_delta < 0.00001:
-            print(episode)
             break
 
         if episode > 0 and episode % 5 == 0:
             epsilon = max(min_epsilon, epsilon * epsilon_decay)  # 确保 epsilon 不低于 0.1
 
-        if (episode + 1) % 1000 == 0:
-            print(
-                f"Episode {episode + 1} completed. Total reward: {total_reward}. Epsilon: {epsilon}, max_delt: {max_delta}")
+        # if (episode + 1) % 1000 == 0:
+        # print(
+        #     f"Episode {episode + 1} completed. Total reward: {total_reward}. Epsilon: {epsilon}, max_delt: {max_delta}")
 
     return Q, rewards, steps
 
@@ -162,61 +155,75 @@ def get_best_action_sequence(Q, env):
 
     return best_action_sequence, action_count
 
-def draw_state(state):
-    screen.fill(WHITE)
-    for i, stack in enumerate(state):
-        for j, block in enumerate(stack):
-            color = BLACK
-            if block == 'b':
-                color = BLUE
-            elif block == 'g':
-                color = GREEN
-            elif block == 'r':
-                color = RED
-            elif block == 'y':
-                color = YELLOW
-            elif block == 'p':
-                color = PURPLE
-            pygame.draw.rect(screen, color, pygame.Rect(positions[i][0], positions[i][1] - j * block_size, block_size, block_size))
-    pygame.display.flip()
 
-env = Env()
-env.start = ((),('r','g','y',), ('p','b'), ())
-env.goal = ((), ('p','b','y'), ('r', 'g'), ())
-#
-env.state = copy.copy(env.start)
-Q, _, _ = q_learning(env)
-best_action_sequence, action_count = get_best_action_sequence(Q, env)
+def main():
+    # 初始化 Pygame
+    pygame.init()
 
-print("Q-table:")
-for state, actions in Q.items():
-    print(f"State: {state}")
-    for action, value in actions.items():
-        print(f"  Action: {action}, Value: {value}")
+    # 设置窗口大小
+    window_size = (600, 400)
+    screen = pygame.display.set_mode(window_size)
+    pygame.display.set_caption("Q-learning Optimal Path")
+    env = Env()
+    env.start = (('g'), ('r', 'b'), ())
+    env.goal = (('r', 'b'), (), ('g',))
+    #
+    env.state = copy.copy(env.start)
+    Q, _, _ = q_learning(env)
+    best_action_sequence, action_count = get_best_action_sequence(Q, env)
 
-print("\nStart State:", env.start)
-print("Goal State:", env.goal)
-print("\nBest Action Sequence:", best_action_sequence)
-print("Number of Actions:", action_count)
+    def draw_state(state):
+        screen.fill(WHITE)
+        for i, stack in enumerate(state):
+            for j, block in enumerate(stack):
+                color = BLACK
+                if block == 'b':
+                    color = BLUE
+                elif block == 'g':
+                    color = GREEN
+                elif block == 'r':
+                    color = RED
+                elif block == 'y':
+                    color = YELLOW
+                elif block == 'p':
+                    color = PURPLE
+                pygame.draw.rect(screen, color,
+                                 pygame.Rect(positions[i][0], positions[i][1] - j * block_size, block_size, block_size))
+        pygame.display.flip()
 
-# 渲染最优路径
-running = True
-current_step = 0
-env.reset()
+    print("Q-table:")
+    for state, actions in Q.items():
+        print(f"State: {state}")
+        for action, value in actions.items():
+            print(f"  Action: {action}, Value: {value}")
 
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
+    print("\nStart State:", env.start)
+    print("Goal State:", env.goal)
+    print("\nBest Action Sequence:", best_action_sequence)
+    print("Number of Actions:", action_count)
+
+    # 渲染最优路径
+    running = True
+    current_step = 0
+    env.reset()
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        if current_step < len(best_action_sequence):
+            draw_state(env.state)
+            pygame.time.wait(1000)  # 等待500毫秒
+            env.step(best_action_sequence[current_step])
+            current_step += 1
+        else:
+            draw_state(env.state)
+            pygame.time.wait(2000)  # 等待2秒
             running = False
 
-    if current_step < len(best_action_sequence):
-        draw_state(env.state)
-        pygame.time.wait(1000)  # 等待500毫秒
-        env.step(best_action_sequence[current_step])
-        current_step += 1
-    else:
-        draw_state(env.state)
-        pygame.time.wait(2000)  # 等待2秒
-        running = False
+    pygame.quit()
 
-pygame.quit()
+
+if __name__ == "__main__":
+    main()

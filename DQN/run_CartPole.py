@@ -19,7 +19,7 @@ RL = DeepQNetwork(n_actions=env.action_space.n,
 
 total_steps = 0
 
-for i_episode in range(100):
+for i_episode in range(130):
 
     observation = env.reset()
     if isinstance(observation, tuple):

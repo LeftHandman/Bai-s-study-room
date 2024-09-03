@@ -126,12 +126,7 @@ class MazeEnv:
             return self.state, 0, False  # 保持在原地，负奖励
         else:
             self.state = (row, col)
-            if self.maze[row][col] == '~':
-                if action in ['x_up', 'x_down', 'x_left', 'x_right']:
-                    return self.state, 0, False  # 踩到沼泽，等待一步，奖励为0
-                else:
-                    return self.state, 0, False  # 踩到沼泽，等待一步，奖励为0
-            elif self.state == self.goal:
+            if self.state == self.goal:
                 return self.state, 1, True  # 到达目标，奖励为1
             else:
                 return self.state, 0, False  # 非沼泽普通位置，轻微负奖励
@@ -147,7 +142,6 @@ def q_learning(env, num_episodes, alpha, gamma, initial_epsilon, epsilon_decay, 
     for row in range(len(env.maze)):
         for col in range(len(env.maze[0])):
             _actions = copy.deepcopy(env.actions)
-
             if row == 0 or env.maze[row-1][col] == '#':
                 _actions.remove('up')
                 _actions.remove('x_up')
@@ -183,6 +177,7 @@ def q_learning(env, num_episodes, alpha, gamma, initial_epsilon, epsilon_decay, 
     rewards = []
     steps = []
     max_steps = initial_max_steps
+    solvable = False
 
     for episode in range(num_episodes):
         state = env.reset()
@@ -198,31 +193,39 @@ def q_learning(env, num_episodes, alpha, gamma, initial_epsilon, epsilon_decay, 
             if random.uniform(0, 1) < epsilon:
                 action = random.choice(list(Q[state, last_action].keys()))
             else:
-
                 action = max(Q[(state, last_action)], key=Q[(state, last_action)].get)  # 利用
             next_state, reward, done = env.step(action)
 
             # 更新 Q 值
-            if not list(Q[next_state, action].keys()):
-                break
-            best_next_action = max(Q[(next_state, action)], key=Q[(next_state, action)].get)
-            if env.maze[next_state[0]][next_state[1]] == '~' or action in ['x_up', 'x_down', 'x_left', 'x_right']:
-                td_target = (reward + gamma * Q[(next_state, action)][best_next_action]) * gamma
+            if list(Q[next_state, action].keys()) and next_state != env.goal:
+                best_next_action = max(Q[(next_state, action)], key=Q[(next_state, action)].get)
+
+                if env.maze[next_state[0]][next_state[1]] == '~' or action in ['x_up', 'x_down', 'x_left', 'x_right']:
+                    td_target = (reward + gamma * Q[(next_state, action)][best_next_action]) * gamma
+                else:
+                    td_target = reward + gamma * Q[(next_state, action)][best_next_action]
+                td_error = td_target - Q[(state, last_action)][action]
+            elif next_state == env.goal:
+                if action in ['x_up', 'x_down', 'x_left', 'x_right']:
+                    td_target = reward * gamma
+                else:
+                    td_target = reward
+                td_error = td_target - Q[(state, last_action)][action]
             else:
-                td_target = reward + gamma * Q[(next_state, action)][best_next_action]
-            td_error = td_target - Q[(state, last_action)][action]
+                td_target = 0  # 死路
+                td_error = td_target - Q[(state, last_action)][action]
             Q[(state, last_action)][action] += alpha * td_error
 
             # 追踪最大 Q 值变化
             max_delta = max(max_delta, abs(td_error))
             last_action = action
-
             state = next_state
             total_reward += reward
             step_count += 1
 
             # 如果超过最大步数上限，认为地图无解，终止当前episode
             if step_count >= max_steps:
+                print('mark')
                 return Q, 0, 0, 0
         rewards.append(total_reward)
         steps.append(step_count)
@@ -230,16 +233,20 @@ def q_learning(env, num_episodes, alpha, gamma, initial_epsilon, epsilon_decay, 
         # q值收敛时终止迭代
         if episode > num_episodes * 0.5 and max_delta < 0.00001:
             break
+        if total_reward > 0:
+            solvable = True
         # ε 衰减
         if episode > 0 and episode % 12 == 0:
             epsilon = max(0.01, epsilon * epsilon_decay)  # 确保 epsilon 不低于 0.1
         # 更新最大步数上限，随 epsilon 衰减
         max_steps = max(1, int(initial_max_steps * epsilon))
         # 打印进度
-        if (episode + 1) % 100000 == 0:
+        if (episode + 1) % 10000 == 0:
             print(
                 f"Episode {episode + 1} completed. Total reward: {total_reward}. Epsilon: {epsilon}, max_delt: {max_delta}")
-
+    if not solvable:
+        print("No solution found!")
+        return Q, 0, 0, 0
     optimal_steps = compute_optimal_steps(env, Q)
     return Q, rewards, steps, optimal_steps
 
@@ -249,9 +256,9 @@ def compute_optimal_steps(env, Q):
     steps = 0
     last_action = None
     while state != env.goal:
-        print(state)
+        # print(state)
         action = max(Q[(state, last_action)], key=Q[(state, last_action)].get)
-        print(action)
+        # print(action)
         state, reward, _ = env.step(action)
         steps += 2 if env.maze[state[0]][state[1]] == '~' or action in ['x_up', 'x_down', 'x_left', 'x_right'] else 1
         last_action = action
@@ -260,23 +267,12 @@ def compute_optimal_steps(env, Q):
 
 # 设置参数并运行 Q-learning
 env = MazeEnv(8)
-env.maze = [
-['G', '~', '~', 'S', '.', '~'] ,
-['.', '~', '.', '#', '.', '.'] ,
-['.', '#', '.', '.', '.', '.'] ,
-['#', '#', '.', '~', '~', '.'] ,
-['.', '.', '.', '#', '#', '.'] ,
-['~', '~', '.', '.', '.', '#'] ,
-['.', '~', '~', '~', '~', '.'] ,
-['#', '.', '#', '.', '.', '#'] ,
-['.', '.', '.', '.', '.', '.'] , ]
-env.start = (0, 3)
-env.goal = (0, 0)
+
 num_episodes = 50000  # 增加最大迭代次数
 alpha = 0.1
 gamma = 0.9
-initial_epsilon = 0.8  # 初始ε
-epsilon_decay = 0.9999  # 衰减率
+initial_epsilon = 0.9  # 初始ε
+epsilon_decay = 0.995  # 衰减率
 initial_max_steps = 100000  # 设置最大步数上限
 
 for row in env.maze:
